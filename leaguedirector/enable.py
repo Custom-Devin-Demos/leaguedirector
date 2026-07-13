@@ -1,11 +1,14 @@
+from __future__ import annotations
+
 import os
 import psutil
 import platform
 import logging
 import subprocess
+from typing import Optional
 from PySide6.QtCore import *
 
-def findWindowsInstalled(paths):
+def findWindowsInstalled(paths: list[str]) -> None:
     """
     Find games install in the windows registry.
     """
@@ -14,7 +17,7 @@ def findWindowsInstalled(paths):
         if key.startswith('Riot Game league_of_legends') and key.endswith('InstallLocation'):
             paths.append(settings.value(key))
 
-def findWindowsRunning(paths):
+def findWindowsRunning(paths: list[str]) -> None:
     """
     Find any running games on windows
     """
@@ -28,7 +31,7 @@ def findWindowsRunning(paths):
         elif name in ('launcher.exe', 'singleplayertool.exe') and 'DevRoot' in path:
             paths.append(os.path.join(path.split('\\DevRoot')[0], 'DevRoot'))
 
-def findWindowsCached(paths):
+def findWindowsCached(paths: list[str]) -> None:
     """
     Search through the windows MUI cache which is another place windows
     will keep track of league of legends clients that have been started
@@ -40,7 +43,7 @@ def findWindowsCached(paths):
         if index > 0:
             paths.append(key[0:index])
 
-def findMacInstalled(paths):
+def findMacInstalled(paths: list[str]) -> None:
     """
     Ask the mac system profiler to list all installed apps.
     """
@@ -48,7 +51,7 @@ def findMacInstalled(paths):
     for line in subprocess.check_output(['mdfind', query]).splitlines():
         paths.append(line.decode())
 
-def findMacRunning(paths):
+def findMacRunning(paths: list[str]) -> None:
     """
     List all the running league client processes.
     """
@@ -58,8 +61,8 @@ def findMacRunning(paths):
             if len(path) == 2:
                 paths.append(path[0])
 
-def findInstalledGames():
-    paths = []
+def findInstalledGames() -> list[str]:
+    paths: list[str] = []
 
     # Find running games on windows
     if platform.system() == 'Windows':
@@ -71,12 +74,12 @@ def findInstalledGames():
         findMacRunning(paths)
     
     # Make sure all paths are valid and formatted the same
-    paths = [configFilePath(os.path.abspath(path)) for path in paths]
+    configs = [configFilePath(os.path.abspath(path)) for path in paths]
 
     # Remove nones + duplicates and sort
-    return sorted(list(set([os.path.normcase(path) for path in paths if path is not None])))
+    return sorted(list(set([os.path.normcase(path) for path in configs if path is not None])))
 
-def configFilePath(path):
+def configFilePath(path: str) -> Optional[str]:
     path = os.path.abspath(path)
     if platform.system() == 'Darwin':
         path = os.path.join(path, 'Contents', 'LoL')
@@ -89,15 +92,16 @@ def configFilePath(path):
     config = os.path.join(path, 'Game', 'Config', 'game.cfg')
     if os.path.isfile(config):
         return config
+    return None
 
-def isGameEnabled(path):
+def isGameEnabled(path: str) -> bool:
     if os.path.isfile(path):
         settings = QSettings(path, QSettings.IniFormat)
         value = settings.value('EnableReplayApi', False)
         return str(value).lower() in ['true', '1']
     return False
 
-def setGameEnabled(path, enabled):
+def setGameEnabled(path: str, enabled: bool) -> None:
     if os.path.isfile(path):
         logging.info('Setting EnableReplayApi %s=%d', path, enabled)
         settings = QSettings(path, QSettings.IniFormat)

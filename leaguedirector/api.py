@@ -1,9 +1,12 @@
+from __future__ import annotations
+
 import os
 import time
 import json
 import copy
 import logging
 import functools
+from typing import Any, Optional, cast
 from leaguedirector.widgets import userpath
 from PySide6.QtCore import *
 from PySide6.QtNetwork import *
@@ -13,22 +16,22 @@ class Resource(QObject):
     """
     Base class for a remote api resources.
     """
-    updated     = Signal()
-    host        = 'https://127.0.0.1:2999'
-    url         = ''
-    fields      = {}
-    connected   = False
-    readonly    = False
-    writeonly   = False
-    network     = None
+    updated                    = Signal()
+    host: str                  = 'https://127.0.0.1:2999'
+    url: str                   = ''
+    fields: dict[str, Any]     = {}
+    connected: bool            = False
+    readonly: bool             = False
+    writeonly: bool            = False
+    network: Any               = None
 
-    def __init__(self):
+    def __init__(self) -> None:
         super(Resource, self).__setattr__('timestamp', time.time())
         for name, default in self.fields.items():
             super(Resource, self).__setattr__(name, default)
         QObject.__init__(self)
 
-    def __setattr__(self, name, value):
+    def __setattr__(self, name: str, value: Any) -> None:
         if name in self.fields:
             if self.readonly:
                 raise AttributeError("Resource is readonly")
@@ -38,11 +41,11 @@ class Resource(QObject):
         else:
             super(Resource, self).__setattr__(name, value)
 
-    def sslErrors(self, response, errors):
+    def sslErrors(self, response: Any, errors: Any) -> None:
         allowed = [QSslError.CertificateUntrusted, QSslError.HostNameMismatch, QSslError.CertificateExpired, QSslError.CertificateNotYetValid]
         response.ignoreSslErrors([e for e in errors if e.error() in allowed])
 
-    def manager(self):
+    def manager(self) -> Any:
         if Resource.network is None:
             # QT does not ship SSL binaries so we have to bundle them in our res directory
             os.environ['PATH'] = os.path.abspath('resources') + os.pathsep + os.environ['PATH']
@@ -55,22 +58,22 @@ class Resource(QObject):
             Resource.network.sslErrors.connect(self.sslErrors)
         return Resource.network
 
-    def set(self, name, value):
+    def set(self, name: str, value: Any) -> None:
         self.__setattr__(name, value)
 
-    def get(self, name):
+    def get(self, name: str) -> Any:
         return getattr(self, name)
 
-    def shutdown(self):
+    def shutdown(self) -> None:
         pass
 
-    def data(self):
+    def data(self) -> dict[str, Any]:
         return {name: getattr(self, name) for name in self.fields}
 
-    def keys(self):
+    def keys(self) -> list[str]:
         return list(self.fields)
 
-    def update(self, data=None):
+    def update(self, data: Optional[dict[str, Any]] = None) -> None:
         request = QNetworkRequest(QUrl(self.host + self.url))
         if data is not None:
             request.setHeader(QNetworkRequest.ContentTypeHeader, "application/json")
@@ -79,7 +82,7 @@ class Resource(QObject):
             response = self.manager().get(request)
         response.finished.connect(functools.partial(self.finished, response))
 
-    def finished(self, response):
+    def finished(self, response: Any) -> None:
         error = response.error()
         if error == QNetworkReply.NoError:
             Resource.connected = True
@@ -91,7 +94,7 @@ class Resource(QObject):
             logging.error("Request Failed: {} {}".format(self.url, response.errorString()))
         self.updated.emit()
 
-    def apply(self, data):
+    def apply(self, data: dict[str, Any]) -> None:
         if not self.writeonly:
             for key, value in data.items():
                 if key in self.fields:
@@ -190,17 +193,22 @@ class Render(Resource):
         'depthOfFieldFar' : 0,
     }
 
-    def __init__(self):
+    # Declared so mypy can resolve these dynamically-populated fields, which are
+    # both read and re-assigned within this class.
+    cameraPosition: dict[str, float]
+    cameraRotation: dict[str, float]
+
+    def __init__(self) -> None:
         Resource.__init__(self)
-        self.cameraMoveBackX = None
-        self.cameraMoveBackY = None
-        self.cameraMoveBackZ = None
-        self.cameraMoveBackLast = None
+        self.cameraMoveBackX: Optional[float] = None
+        self.cameraMoveBackY: Optional[float] = None
+        self.cameraMoveBackZ: Optional[float] = None
+        self.cameraMoveBackLast: Any = None
         self.timer = QTimer()
         self.timer.timeout.connect(self.updateCameraMoveBack)
         self.timer.start(600)
 
-    def updateCameraMoveBack(self, *args):
+    def updateCameraMoveBack(self, *args: Any) -> None:
         # Wait until the camera stops moving before snapping it
         if self.cameraMoveBackLast != self.cameraPosition:
             self.cameraMoveBackLast = self.cameraPosition
@@ -214,23 +222,23 @@ class Render(Resource):
                 copy['z'] = self.cameraMoveBackZ
             self.cameraPosition = copy
 
-    def toggleCameraMoveBackX(self):
+    def toggleCameraMoveBackX(self) -> None:
         self.cameraMoveBackX = self.cameraPosition['x'] if self.cameraMoveBackX is None else None
 
-    def toggleCameraMoveBackY(self):
+    def toggleCameraMoveBackY(self) -> None:
         self.cameraMoveBackY = self.cameraPosition['y'] if self.cameraMoveBackY is None else None
 
-    def toggleCameraMoveBackZ(self):
+    def toggleCameraMoveBackZ(self) -> None:
         self.cameraMoveBackZ = self.cameraPosition['z'] if self.cameraMoveBackZ is None else None
 
-    def moveCamera(self, x=0, y=0, z=0):
+    def moveCamera(self, x: float = 0, y: float = 0, z: float = 0) -> None:
         copy = dict(self.cameraPosition)
         copy['x'] += x
         copy['y'] += y
         copy['z'] += z
         self.cameraPosition = copy
 
-    def rotateCamera(self, x=0, y=0, z=0):
+    def rotateCamera(self, x: float = 0, y: float = 0, z: float = 0) -> None:
         copy = dict(self.cameraRotation)
         copy['x'] += x
         copy['y'] += y
@@ -240,23 +248,23 @@ class Render(Resource):
 
 class Particles(Resource):
     url = '/replay/particles'
-    fields = {}
-    particles = {}
+    fields: dict[str, Any] = {}
+    particles: dict[str, Any] = {}
 
-    def apply(self, data):
+    def apply(self, data: dict[str, Any]) -> None:
         self.particles = data
 
-    def items(self):
+    def items(self) -> Any:
         return self.particles.items()
 
-    def hasParticle(self, particle):
+    def hasParticle(self, particle: str) -> bool:
         return particle in self.particles
 
-    def setParticle(self, particle, enabled):
+    def setParticle(self, particle: str, enabled: bool) -> None:
         if particle in self.particles:
             self.update({particle:enabled})
 
-    def getParticle(self, particle):
+    def getParticle(self, particle: str) -> Any:
         return self.particles.get(particle, True)
 
 
@@ -270,37 +278,41 @@ class Playback(Resource):
         'length':   1.0,
     }
 
+    # Declared so mypy can resolve this dynamically-populated field, which is
+    # both read and re-assigned within this class.
+    paused: bool
+
     @property
-    def currentTime(self):
+    def currentTime(self) -> float:
         if self.paused:
             return self.time
         else:
             return min(self.time + (time.time() - self.timestamp) * self.speed, self.length)
 
     @property
-    def currentTimeFormatted(self):
+    def currentTimeFormatted(self) -> str:
         minutes, seconds = divmod(self.currentTime, 60)
         return '{0:02}:{1:05.2f}'.format(int(minutes), seconds)
 
-    def togglePlay(self):
+    def togglePlay(self) -> None:
         self.paused = not self.paused
 
-    def setSpeed(self, speed):
+    def setSpeed(self, speed: float) -> None:
         self.speed = speed
 
-    def adjustTime(self, delta):
+    def adjustTime(self, delta: float) -> None:
         self.time = self.currentTime + delta
 
-    def play(self, time=None):
+    def play(self, time: Optional[float] = None) -> None:
         if not self.seeking:
-            data = {'paused': False}
+            data: dict[str, Any] = {'paused': False}
             if time is not None:
                 data['time'] = time
             self.update(data)
 
-    def pause(self, time=None):
+    def pause(self, time: Optional[float] = None) -> None:
         if not self.seeking:
-            data = {'paused': True}
+            data: dict[str, Any] = {'paused': True}
             if time is not None:
                 data['time'] = time
             self.update(data)
@@ -311,9 +323,9 @@ class Sequence(Resource):
     namesLoaded = Signal()
     url = '/replay/sequence'
     writeonly = True
-    history = []
-    history_index = 0
-    fields = {
+    history: list[dict[str, Any]] = []
+    history_index: int = 0
+    fields: dict[str, Any] = {
         'playbackSpeed': [],
         'cameraPosition': [],
         'cameraRotation': [],
@@ -342,7 +354,7 @@ class Sequence(Resource):
         'depthOfFieldMid': [],
         'depthOfFieldFar': [],
     }
-    blendOptions = [
+    blendOptions: list[str] = [
         'linear',
         'snap',
         'smoothStep',
@@ -379,14 +391,14 @@ class Sequence(Resource):
         'bounceEaseInOut',
     ]
 
-    def __init__(self, render, playback):
+    def __init__(self, render: Render, playback: Playback) -> None:
         Resource.__init__(self)
         self.render = render
         self.playback = playback
-        self.name = ''
-        self.names = []
-        self.directory = None
-        self.sequencing = False
+        self.name: str = ''
+        self.names: list[str] = []
+        self.directory: Optional[str] = None
+        self.sequencing: bool = False
         self.saveRemoteTimer = QTimer()
         self.saveRemoteTimer.timeout.connect(self.saveRemoteNow)
         self.saveRemoteTimer.setSingleShot(True)
@@ -397,56 +409,58 @@ class Sequence(Resource):
         self.saveFileTimer.timeout.connect(self.saveFileNow)
         self.saveFileTimer.setSingleShot(True)
 
-    def update(self, *args):
+    def update(self, *args: Any) -> None:
         self.saveRemote()
         self.saveFile()
         self.saveHistory()
 
-    def data(self):
+    def data(self) -> dict[str, Any]:
         return {key:getattr(self, key) for key in self.fields}
 
     @property
-    def startTime(self):
+    def startTime(self) -> Optional[float]:
         keyframes = self.cameraPosition + self.cameraRotation
         if len(keyframes):
-            return min(keyframe['time'] for keyframe in keyframes)            
+            return min(keyframe['time'] for keyframe in keyframes)
+        return None
 
     @property
-    def endTime(self):
+    def endTime(self) -> Optional[float]:
         keyframes = self.cameraPosition + self.cameraRotation
         if len(keyframes):
-            return max(keyframe['time'] for keyframe in keyframes)            
+            return max(keyframe['time'] for keyframe in keyframes)
+        return None
 
-    def path(self):
-        return os.path.join(self.directory, self.name + '.json')
+    def path(self) -> str:
+        return os.path.join(cast(str, self.directory), self.name + '.json')
 
-    def load(self, name):
+    def load(self, name: str) -> None:
         self.saveFileNow()
         self.loadFile(name)
 
-    def create(self, name):
+    def create(self, name: str) -> None:
         self.saveFileNow()
         self.clearData()
         self.resetHistory()
         self.saveFileNow(name)
         self.reloadNames()
 
-    def save(self, name=None):
+    def save(self, name: Optional[str] = None) -> None:
         self.saveFile(name)
 
-    def copy(self, name):
+    def copy(self, name: str) -> None:
         oldName = self.name
         self.saveFileNow(name)
         self.saveFileNow(oldName)
         self.reloadNames()
 
-    def undo(self):
+    def undo(self) -> None:
         self.loadHistory(self.history_index - 1)
 
-    def redo(self):
+    def redo(self) -> None:
         self.loadHistory(self.history_index + 1)
 
-    def setDirectory(self, path):
+    def setDirectory(self, path: str) -> None:
         if os.path.exists(path) and os.path.isdir(path):
             self.directory = path
             self.clearData()
@@ -454,36 +468,36 @@ class Sequence(Resource):
             self.saveFileNow()
             self.reloadNames()
 
-    def saveRemoteNow(self):
+    def saveRemoteNow(self) -> None:
         self.sortData()
         if self.sequencing:
             Resource.update(self, self.data())
         else:
             Resource.update(self, {})
 
-    def saveRemote(self):
+    def saveRemote(self) -> None:
         self.saveRemoteTimer.start(0)
 
-    def saveHistoryNow(self):
+    def saveHistoryNow(self) -> None:
         self.history = self.history[0:self.history_index + 1]
         self.history_index = len(self.history)
         self.history.append(copy.deepcopy(self.data()))
 
-    def saveHistory(self):
+    def saveHistory(self) -> None:
         self.saveHistoryTimer.start(500)
 
-    def loadHistory(self, index):
+    def loadHistory(self, index: int) -> None:
         if len(self.history):
             self.history_index = max(min(index, len(self.history) - 1), 0)
             self.loadData(copy.deepcopy(self.history[self.history_index]))
             self.saveRemote()
             self.saveFileNow()
 
-    def resetHistory(self):
+    def resetHistory(self) -> None:
         self.history = []
         self.history_index = 0
 
-    def loadFile(self, name):
+    def loadFile(self, name: str) -> None:
         self.name = name
         if os.path.exists(self.path()):
             with open(self.path(), 'r') as f:
@@ -492,7 +506,7 @@ class Sequence(Resource):
                 self.saveRemote()
                 self.saveHistory()
 
-    def saveFileNow(self, name=None):
+    def saveFileNow(self, name: Optional[str] = None) -> None:
         self.name = name or self.name
         if self.name:
             path = self.path()
@@ -502,46 +516,46 @@ class Sequence(Resource):
                 if not exists:
                     self.reloadNames()
 
-    def saveFile(self, name=None):
+    def saveFile(self, name: Optional[str] = None) -> None:
         self.name = name or self.name
         self.saveFileTimer.start(1000)
 
-    def clearData(self):
+    def clearData(self) -> None:
         for track in self.fields:
             getattr(self, track, []).clear()
         self.dataLoaded.emit()
 
-    def loadData(self, data):
+    def loadData(self, data: Any) -> None:
         if isinstance(data, dict):
             for key, value in data.items():
                 if value is not None:
                     super(Resource, self).__setattr__(key, value)
             self.dataLoaded.emit()
 
-    def sortData(self):
+    def sortData(self) -> None:
         for track in self.fields:
             if getattr(self, track):
                 getattr(self, track).sort(key = lambda item: item['time'])
 
-    def reloadNames(self):
-        self.names = sorted([f.replace('.json', '') for f in os.listdir(self.directory) if f.endswith('.json')], key=str.lower)
+    def reloadNames(self) -> None:
+        self.names = sorted([f.replace('.json', '') for f in os.listdir(cast(str, self.directory)) if f.endswith('.json')], key=str.lower)
         self.namesLoaded.emit()
 
     @property
-    def index(self):
+    def index(self) -> int:
         try:
             return self.names.index(self.name)
         except ValueError:
             return 0
 
-    def setSequencing(self, value):
+    def setSequencing(self, value: bool) -> None:
         self.sequencing = value
         self.update()
 
-    def getKeyframes(self, name):
+    def getKeyframes(self, name: str) -> Any:
         return getattr(self, name)
 
-    def createKeyframe(self, name):
+    def createKeyframe(self, name: str) -> dict[str, Any]:
         keyframe = {
             'time': self.playback.time,
             'value': self.getValue(name),
@@ -550,15 +564,15 @@ class Sequence(Resource):
         self.appendKeyframe(name, keyframe)
         return keyframe
 
-    def appendKeyframe(self, name, keyframe):
+    def appendKeyframe(self, name: str, keyframe: dict[str, Any]) -> None:
         getattr(self, name).append(keyframe)
         self.update()
 
-    def removeKeyframe(self, name, item):
+    def removeKeyframe(self, name: str, item: dict[str, Any]) -> None:
         getattr(self, name).remove(item)
         self.update()
 
-    def getLabel(self, name):
+    def getLabel(self, name: str) -> str:
         if name == 'cameraPosition':
             return 'Camera Position'
         if name == 'cameraRotation':
@@ -615,7 +629,7 @@ class Sequence(Resource):
             return 'DOF Far'
         return name
 
-    def getValue(self, name):
+    def getValue(self, name: str) -> Any:
         if name == 'cameraPosition':
             return self.render.cameraPosition
         if name == 'cameraRotation':
