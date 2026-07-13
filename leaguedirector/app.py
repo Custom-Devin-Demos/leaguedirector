@@ -470,7 +470,34 @@ class RecordingWindow(VBoxWidget):
         self.setOutputDirectory(QFileDialog.getExistingDirectory(self, 'Select Output Directory', self.outputPath))
 
     def openRecording(self, item):
-        QDesktopServices.openUrl(QUrl('file:///{}'.format(item.text())))
+        path = self.safeRecordingPath(item.text())
+        if path is None:
+            logging.warning("Refusing to open untrusted recording path: %r", item.text())
+            return
+        QDesktopServices.openUrl(QUrl.fromLocalFile(path))
+
+    def safeRecordingPath(self, path):
+        """Validate a Replay-API-supplied recording path before opening it.
+
+        The path is only trusted when it resolves to a regular file located
+        inside the known output directory. UNC paths and anything outside the
+        output directory are rejected so a rogue Replay API cannot steer the
+        user into opening an arbitrary file through the OS handler.
+        """
+        if not path or not isinstance(path, str):
+            return None
+        if path.startswith('\\\\') or path.startswith('//'):
+            return None
+        real = os.path.realpath(path)
+        base = os.path.realpath(self.outputPath)
+        try:
+            if os.path.commonpath([real, base]) != base:
+                return None
+        except ValueError:
+            return None
+        if not os.path.isfile(real):
+            return None
+        return real
 
     def stopRecording(self):
         self.api.recording.update({'recording' : False})
