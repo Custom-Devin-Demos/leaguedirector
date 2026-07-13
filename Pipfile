@@ -4,6 +4,8 @@ url = "https://pypi.org/simple"
 verify_ssl = true
 
 [dev-packages]
+pytest = "==8.3.5"
+pytest-qt = "==4.4.0"
 
 [packages]
 PySide6 = "==6.6.3.1"
