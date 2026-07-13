@@ -10,10 +10,17 @@ exactly like the real ``QNetworkReply``.
 
 import json
 import os
+import sys
 
 # Ensure Qt runs without a display; harmless for QCoreApplication and required
 # should any pytest-qt QApplication fixture be pulled in.
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+# Make the repo importable when invoked as bare `pytest` (which, unlike
+# `python -m pytest`, does not add the working directory to sys.path).
+_REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if _REPO_ROOT not in sys.path:
+    sys.path.insert(0, _REPO_ROOT)
 
 import pytest
 from PySide6.QtCore import QByteArray, QCoreApplication, QEventLoop, QObject, QTimer, Signal
