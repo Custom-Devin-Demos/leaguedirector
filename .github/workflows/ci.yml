@@ -1,0 +1,71 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    env:
+      QT_QPA_PLATFORM: offscreen
+      PIPENV_NOSPIN: "1"
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Qt system libraries
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes \
+            libegl1 \
+            libgl1 \
+            libxcb-cursor0 \
+            libxkbcommon0 \
+            libxkbcommon-x11-0
+
+      - name: Install dependencies and check tools
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pipenv
+          pipenv install --dev --skip-lock
+          pipenv run python -m pip install \
+            "mypy==1.16.1" \
+            "pytest==8.4.1" \
+            "ruff==0.12.4"
+
+      - name: Lint
+        run: pipenv run ruff check --output-format=github --select=E9,F63,F7,F82 leaguedirector
+
+      - name: Type check
+        run: |
+          if [[ -f mypy.ini || -f .mypy.ini ]] \
+            || grep -qs '^\[tool\.mypy\]' pyproject.toml \
+            || grep -qs '^\[mypy\]' setup.cfg; then
+            pipenv run mypy leaguedirector
+          else
+            echo "No mypy configuration found; type checking will activate when one is added."
+          fi
+
+      - name: Test
+        run: |
+          set +e
+          pipenv run pytest
+          status=$?
+          set -e
+
+          if [[ $status -eq 5 ]]; then
+            echo "No tests collected; this is allowed until tests are added."
+            exit 0
+          fi
+
+          exit "$status"
